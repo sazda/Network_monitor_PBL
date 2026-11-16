@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSI paket za Network Monitor agenta ZA SERVERE (WiX Toolset v5).
+  Agent za servere javlja konzoli da je server na vezi i salje stanje
+  (uptime, CPU, RAM, diskovi); ne izvrsava merenja mreze.
+  Pravi se komandom:  .\build.ps1 -Msi
+
+  Javna svojstva (msiexec ... IME=vrednost):
+    CONSOLE_URL  adresa konzole, npr. https://netmon.firma.local:8443   (obavezno)
+    AGENT_TOKEN  token za agente iz konzole (Podesavanja)               (obavezno)
+  Pri nadogradnji se, ako nisu zadata, preuzimaju iz postojece instalacije.
+
+  Tekstovi u paketu su namerno bez dijakritika (MSI tabele koriste
+  jednu kodnu stranu).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
+  <Package Name="Network Monitor Server Agent"
+           Manufacturer="Network Monitor"
+           Version="$(var.Version)"
+           UpgradeCode="60d67100-60a5-4d89-bce2-6d540eee63ba"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="Vec je instalirana novija verzija Network Monitor agenta za servere." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Vrednosti iz postojece instalacije (registry) imaju prednost nad
+         vrednostima ugradjenim pri build-u; vrednosti sa komandne linije
+         imaju prednost nad oba. -->
+    <?ifdef DefaultConsoleUrl ?>
+    <Property Id="CONSOLE_URL" Secure="yes" Value="$(var.DefaultConsoleUrl)">
+      <RegistrySearch Id="FindConsoleUrl" Root="HKLM" Key="SOFTWARE\NetworkMonitor\ServerAgent" Name="ConsoleURL" Type="raw" Bitness="always64" />
+    </Property>
+    <?else?>
+    <Property Id="CONSOLE_URL" Secure="yes">
+      <RegistrySearch Id="FindConsoleUrl" Root="HKLM" Key="SOFTWARE\NetworkMonitor\ServerAgent" Name="ConsoleURL" Type="raw" Bitness="always64" />
+    </Property>
+    <?endif?>
+
+    <?ifdef DefaultAgentToken ?>
+    <Property Id="AGENT_TOKEN" Secure="yes" Hidden="yes" Value="$(var.DefaultAgentToken)">
+      <RegistrySearch Id="FindAgentToken" Root="HKLM" Key="SOFTWARE\NetworkMonitor\ServerAgent" Name="Token" Type="raw" Bitness="always64" />
+    </Property>
+    <?else?>
+    <Property Id="AGENT_TOKEN" Secure="yes" Hidden="yes">
+      <RegistrySearch Id="FindAgentToken" Root="HKLM" Key="SOFTWARE\NetworkMonitor\ServerAgent" Name="Token" Type="raw" Bitness="always64" />
+    </Property>
+    <?endif?>
+
+    <Launch Condition="Installed OR (CONSOLE_URL AND AGENT_TOKEN)"
+            Message="Nedostaju podesavanja. Instalirajte komandom: msiexec /i NetworkMonitorServerAgent.msi CONSOLE_URL=https://server:8443 AGENT_TOKEN=token (token se nalazi u konzoli, Podesavanja)." />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="NetworkMonitor">
+        <Directory Id="AGENTFOLDER" Name="ServerAgent" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAROOT" Name="NetworkMonitor">
+        <Directory Id="DATAFOLDER" Name="ServerAgent" />
+      </Directory>
+    </StandardDirectory>
+
+    <Component Id="AgentService" Directory="AGENTFOLDER">
+      <File Id="AgentExe" Source="$(var.ServerAgentExe)" Name="serveragent.exe" KeyPath="yes" />
+      <ServiceInstall Id="AgentServiceInstall"
+                      Name="network-monitor-server-agent"
+                      DisplayName="Network Monitor Server Agent"
+                      Description="Javlja Network Monitor konzoli stanje servera (na vezi, uptime, CPU, RAM, diskovi)."
+                      Type="ownProcess" Start="auto" ErrorControl="normal"
+                      Account="LocalSystem" Arguments="run" Vital="yes">
+        <util:ServiceConfig FirstFailureActionType="restart"
+                            SecondFailureActionType="restart"
+                            ThirdFailureActionType="restart"
+                            RestartServiceDelayInSeconds="30"
+                            ResetPeriodInDays="1" />
+      </ServiceInstall>
+      <ServiceControl Id="AgentServiceControl" Name="network-monitor-server-agent"
+                      Start="install" Stop="both" Remove="uninstall" Wait="no" />
+      <!-- Dolazni ping (ICMPv4 echo), samo na domenskoj mrezi: kada se agent ne
+           javlja, konzola pinguje server (da li je pao server ili samo agent). -->
+      <fw:FirewallException Id="AgentIcmpEcho" Name="Network Monitor Server Agent (ping)"
+                            Description="Dozvoljava ping (ICMPv4 echo) na domenskoj mrezi za Network Monitor."
+                            Protocol="1" IcmpTypesAndCodes="8:*" Scope="any" Profile="domain" />
+    </Component>
+
+    <!-- Adresa konzole i token: kljuc citaju samo SYSTEM i administratori. -->
+    <Component Id="AgentSettings" Directory="AGENTFOLDER">
+      <RegistryKey Root="HKLM" Key="SOFTWARE\NetworkMonitor\ServerAgent" ForceCreateOnInstall="yes">
+        <RegistryValue Name="ConsoleURL" Type="string" Value="[CONSOLE_URL]" KeyPath="yes" />
+        <RegistryValue Name="Token" Type="string" Value="[AGENT_TOKEN]" />
+        <PermissionEx Sddl="D:PAI(A;CI;KA;;;SY)(A;CI;KA;;;BA)" />
+      </RegistryKey>
+    </Component>
+
+    <!-- ID i log agenta: samo SYSTEM i administratori. -->
+    <Component Id="AgentDataFolder" Directory="DATAFOLDER" Guid="3b95cb9f-91e5-430e-bd00-abd4105e29a6">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+      </CreateFolder>
+    </Component>
+  </Package>
+</Wix>

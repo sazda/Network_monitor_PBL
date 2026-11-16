@@ -1,0 +1,11 @@
+/dist/
+/data/
+*.exe
+/agent
+/console
+/docs/uputstvo/node_modules/
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+*.jks
+*.keystore

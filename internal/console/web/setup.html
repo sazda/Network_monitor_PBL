@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Monitor – podešavanje</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>Network Monitor</h1><span class="muted">prvo pokretanje</span></header>
+<main class="narrow">
+  <section>
+    <h2>Postavite administratorski nalog</h2>
+    <p class="muted">Ova stranica je dostupna samo sa samog servera, dok se ne postavi lozinka.
+      Posle toga konzolu možete otvarati sa bilo kog računara u mreži.</p>
+    <form id="setup" class="stack">
+      <label>Korisničko ime <input id="user" value="admin" autocomplete="username" required></label>
+      <label>Lozinka (najmanje 8 karaktera) <input id="pass" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Ponovite lozinku <input id="pass2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <button type="submit">Sačuvaj</button>
+      <p id="msg"></p>
+    </form>
+  </section>
+</main>
+<script src="setup.js"></script>
+</body>
+</html>

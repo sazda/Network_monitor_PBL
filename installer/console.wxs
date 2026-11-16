@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSI paket za Network Monitor konzolu (WiX Toolset v5).
+  Pravi se komandom:  .\build.ps1 -Msi
+
+  Javna svojstva:
+    PORT   TCP port konzole (podrazumevano 8443)
+
+  Posle instalacije: Start meni -> Network Monitor -> "Network Monitor konzola"
+  na samom serveru, postaviti administratorsku lozinku, pa u Podesavanjima
+  otpremiti sertifikat iz internog CA.
+  Konfiguracija i podaci (C:\ProgramData\NetworkMonitor) ostaju posle
+  deinstalacije.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
+  <Package Name="Network Monitor Console"
+           Manufacturer="Network Monitor"
+           Version="$(var.Version)"
+           UpgradeCode="18778d39-bc40-4b7b-9e02-998fa0c6a01c"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="Vec je instalirana novija verzija Network Monitor konzole." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="PORT" Secure="yes" Value="8443">
+      <RegistrySearch Id="FindPort" Root="HKLM" Key="SOFTWARE\NetworkMonitor\Console" Name="Port" Type="raw" Bitness="always64" />
+    </Property>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="NetworkMonitor">
+        <Directory Id="CONSOLEFOLDER" Name="Console" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAFOLDER" Name="NetworkMonitor" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="SHORTCUTFOLDER" Name="Network Monitor" />
+    </StandardDirectory>
+
+    <Component Id="ConsoleService" Directory="CONSOLEFOLDER">
+      <File Id="ConsoleExe" Source="$(var.ConsoleExe)" Name="console.exe" KeyPath="yes" />
+      <ServiceInstall Id="ConsoleServiceInstall"
+                      Name="network-monitor-console"
+                      DisplayName="Network Monitor Console"
+                      Description="Centralna konzola za merenje latencije i brzine mreze."
+                      Type="ownProcess" Start="auto" ErrorControl="normal"
+                      Account="LocalSystem"
+                      Arguments="-config &quot;[DATAFOLDER]console.json&quot; -listen :[PORT] run"
+                      Vital="yes">
+        <util:ServiceConfig FirstFailureActionType="restart"
+                            SecondFailureActionType="restart"
+                            ThirdFailureActionType="restart"
+                            RestartServiceDelayInSeconds="30"
+                            ResetPeriodInDays="1" />
+      </ServiceInstall>
+      <ServiceControl Id="ConsoleServiceControl" Name="network-monitor-console"
+                      Start="install" Stop="both" Remove="uninstall" Wait="no" />
+      <fw:FirewallException Id="ConsoleFirewall" Name="Network Monitor Console"
+                            Port="[PORT]" Protocol="tcp" Scope="any" Profile="domain" />
+      <!-- Syslog switch-eva (ko je pokrenuo restart), samo na domenskoj mrezi. -->
+      <fw:FirewallException Id="ConsoleSyslog" Name="Network Monitor Console (syslog)"
+                            Port="5514" Protocol="udp" Scope="any" Profile="domain" />
+    </Component>
+
+    <!-- MSI agenta, za instalaciju agenata iz konzole (Podesavanja). -->
+    <Component Id="AgentPackage" Directory="CONSOLEFOLDER">
+      <File Id="AgentMsi" Source="$(var.AgentMsi)" Name="NetworkMonitorAgent.msi" KeyPath="yes" />
+    </Component>
+    <!-- MSI agenta za servere (instalacija iz konzole, vrsta "serveri"). -->
+    <Component Id="ServerAgentPackage" Directory="CONSOLEFOLDER">
+      <File Id="ServerAgentMsi" Source="$(var.ServerAgentMsi)" Name="NetworkMonitorServerAgent.msi" KeyPath="yes" />
+    </Component>
+
+    <Component Id="ConsoleShortcut" Directory="SHORTCUTFOLDER">
+      <util:InternetShortcut Id="ConsoleUrlShortcut" Name="Network Monitor konzola"
+                             Target="https://localhost:[PORT]/" Type="url" />
+      <RemoveFolder Id="RemoveShortcutFolder" On="uninstall" />
+      <RegistryValue Root="HKLM" Key="SOFTWARE\NetworkMonitor\Console" Name="Port"
+                     Type="string" Value="[PORT]" KeyPath="yes" />
+    </Component>
+
+    <!-- Konfiguracija (token, sertifikat, hash lozinke) i podaci: samo
+         SYSTEM i administratori. -->
+    <Component Id="ConsoleDataFolder" Directory="DATAFOLDER" Guid="c0922169-f286-4894-a43d-d3d89f8358f5">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+      </CreateFolder>
+    </Component>
+  </Package>
+</Wix>

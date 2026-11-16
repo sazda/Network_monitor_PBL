@@ -1,0 +1,101 @@
+# Build konzole i agenta (exe + MSI) na GitHub-u.
+#
+# Pokreće se pri svakom push-u i ručno (Actions → Build → Run workflow).
+# Gotovi fajlovi su na stranici build-a, u delu „Artifacts” (čuvaju se 30 dana).
+#
+# U MSI se NE ugrađuju adresa konzole ni token za agente: zadaju se pri
+# instalaciji (vidi README). Paketi nisu potpisani; za potpisivanje koristite
+# build.ps1 -SignThumbprint na računaru sa sertifikatom.
+name: Build
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe za oznaku verzije
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build (exe + MSI)
+        shell: pwsh
+        run: .\build.ps1 -Msi -AllPlatforms
+      - uses: actions/upload-artifact@v4
+        with:
+          name: network-monitor-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  # Android aplikacija NetMon SMS (APK). Potpisuje se ključem iz GitHub tajni
+  # (Settings → Secrets and variables → Actions):
+  #   NETMON_KEYSTORE_B64      – keystore fajl u base64 obliku
+  #   NETMON_KEYSTORE_PASSWORD – lozinka keystore-a
+  #   NETMON_KEY_ALIAS         – alias ključa
+  #   NETMON_KEY_PASSWORD      – lozinka ključa
+  # Bez tajni se pravi samo probni APK (debug potpis): ažuriranje preko njega
+  # ne radi, aplikacija mora da se obriše i ponovo podesi.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Ključ za potpis
+        env:
+          KS: ${{ secrets.NETMON_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/netmon.jks"
+            echo "NETMON_KEYSTORE=$RUNNER_TEMP/netmon.jks" >> "$GITHUB_ENV"
+            echo "APK_KIND=" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Nema ključa za potpis (NETMON_KEYSTORE_B64): pravi se probni APK sa debug potpisom."
+            echo "APK_KIND=-proba" >> "$GITHUB_ENV"
+          fi
+      - name: Testovi i APK
+        env:
+          NETMON_KEYSTORE_PASSWORD: ${{ secrets.NETMON_KEYSTORE_PASSWORD }}
+          NETMON_KEY_ALIAS: ${{ secrets.NETMON_KEY_ALIAS }}
+          NETMON_KEY_PASSWORD: ${{ secrets.NETMON_KEY_PASSWORD }}
+          NETMON_VERSION_CODE: ${{ github.run_number }}
+          NETMON_VERSION_NAME: build-${{ github.run_number }}
+        run: gradle -p android --no-daemon :core:test :app:assembleRelease
+      - name: Naziv fajla
+        run: |
+          mkdir -p apk
+          cp android/app/build/outputs/apk/release/app-release.apk "apk/netmon-sms-${{ github.run_number }}${APK_KIND}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netmon-sms-${{ github.run_number }}
+          path: apk/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Monitor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Network Monitor</h1>
+  <nav class="pages" aria-label="Stranice">
+    <a href="#racunari" data-page="agents">Računari</a>
+    <a href="#mreza" data-page="net">Mrežna oprema <span id="net-badge" class="nav-badge" hidden></span></a>
+    <a href="#mpls" data-page="mpls">MPLS</a>
+    <a href="#serveri" data-page="srv">Serveri <span id="srv-badge" class="nav-badge" hidden></span></a>
+    <a href="#odrzavanje" data-page="maint" class="admin-only">Održavanje</a>
+  </nav>
+  <span class="spacer"></span>
+  <span id="version" class="muted"></span>
+  <span id="whoami" class="muted"></span>
+  <button id="settings-toggle" type="button">Podešavanja</button>
+  <button id="logout" type="button">Odjava</button>
+</header>
+
+<main>
+  <div id="activity" class="activity empty" role="status" aria-live="polite">
+    <span class="act-icon" aria-hidden="true"></span>
+    <span class="act-time"></span>
+    <span id="status" class="act-text">Nema aktivnosti</span>
+    <button id="activity-close" type="button" title="Zatvori poruku" aria-label="Zatvori poruku" hidden>×</button>
+  </div>
+  <section id="net-locs" class="page-net" hidden>
+    <h2>Lokacije <span class="muted h-note">stanje veze po lokacijama</span></h2>
+    <div id="net-loc-tiles" class="loc-tiles"></div>
+  </section>
+  <div class="page-net" id="net-top" hidden>
+  <section id="netdevs-sec">
+    <h2>Mrežna oprema</h2>
+    <div class="toolbar">
+      <input id="nd-search" type="search" placeholder="Pretraga: naziv, IP adresa, mesto…" autocomplete="off">
+      <select id="nd-loc"><option value="">sve lokacije</option></select>
+      <select id="nd-type"><option value="">sve vrste</option></select>
+      <label class="check"><input id="nd-problems" type="checkbox"> samo problemi</label>
+      <span id="nd-count" class="muted"></span>
+      <span class="spacer"></span>
+      <span class="admin-only actions">
+        <button id="nd-add" type="button">Dodaj uređaj</button>
+        <button id="nd-import" type="button">Uvoz (CSV)</button>
+        <button id="nd-snmp" type="button">SNMP podešavanja</button>
+      </span>
+    </div>
+    <div class="table-wrap">
+      <table id="netdevs">
+        <thead>
+          <tr><th></th><th>Uređaj</th><th>Lokacija / mesto</th><th>IP adresa</th><th>Odziv</th><th>Gubitak</th><th>Stanje</th><th>SNMP</th><th title="Najviša temperatura kućišta switch-a (SNMP); boja prema pragovima switch-a">Temp.</th><th>Akcije</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <nav id="nd-pager" class="pager" aria-label="Strane spiska uređaja" hidden></nav>
+    <p id="nd-empty" class="muted" hidden></p>
+  </section>
+  </div>
+  <section id="nd-detail" class="page-net" hidden></section>
+  <section id="nd-events-sec" class="page-net" hidden>
+    <h2>Događaji <span class="muted h-note">padovi, povratci, prekidi lokacija, restarti</span></h2>
+    <div class="table-wrap">
+      <table id="nd-events">
+        <thead><tr><th>Vreme</th><th>Lokacija</th><th>Događaj</th><th>Trajanje</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <nav id="nd-ev-pager" class="pager" aria-label="Strane događaja" hidden></nav>
+  </section>
+
+  <section id="srv-sec" class="page-srv" hidden>
+    <h2>Serveri <span class="muted h-note">agent za servere: na vezi, uptime, CPU, RAM, diskovi</span></h2>
+    <div class="toolbar">
+      <input id="srv-search" type="search" placeholder="Pretraga: server, IP adresa, lokacija…" autocomplete="off">
+      <span id="srv-count" class="muted"></span>
+      <span class="spacer"></span>
+    </div>
+    <p id="srv-note" class="muted small"></p>
+    <div class="table-wrap">
+      <table id="servers">
+        <thead><tr><th></th><th>Server</th><th>Stanje</th><th>Uptime</th><th class="num">CPU</th><th class="num">RAM</th><th>Diskovi</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="srv-empty" class="muted" hidden>Nijedan server se još nije javio. Na server instalirajte
+      <strong>NetworkMonitorServerAgent.msi</strong> (msiexec /i NetworkMonitorServerAgent.msi /qn CONSOLE_URL=… AGENT_TOKEN=…; token je u Podešavanja → Opšte)
+      ili ga instalirajte iz konzole: Podešavanja → Instalacija agenata → Vrsta agenta „Serveri”.</p>
+  </section>
+  <section id="srv-detail" class="page-srv" hidden></section>
+  <section id="mpls-sec" class="page-mpls" hidden>
+    <h2>MPLS <span class="muted h-note">veze lokacija sa Glavnim Centrom (operater): primarni i sekundarni link, zauzeće</span></h2>
+    <div class="toolbar">
+      <span id="mpls-count" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="mpls-add" type="button" class="admin-only">Dodaj CE ruter</button>
+    </div>
+    <div class="table-wrap">
+      <table id="mpls-table">
+        <thead><tr><th>Lokacija</th><th>Saobraćaj ide preko</th><th>Primarni link</th><th>Sekundarni (rezervni) link</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="mpls-empty" class="muted" hidden>Još nema CE rutera. Administrator ih dodaje dugmetom „Dodaj CE ruter” (ili u Izmeni
+      postojećeg uređaja, polje „MPLS link”); za operater rutere izaberite dodatni SNMP nalog (Podešavanja → SNMP).</p>
+  </section>
+  <section id="mpls-detail" class="page-mpls" hidden></section>
+  <section id="mpls-events-sec" class="page-mpls" hidden>
+    <h2>Događaji MPLS veza</h2>
+    <ul id="mpls-events" class="nd-ev-list"></ul>
+  </section>
+  <section id="maint-sec" class="page-maint" hidden>
+    <h2>Održavanje <span class="muted h-note">preuzimanje loga i backup-a konfiguracije sa switch-eva (Cisco C9200L, C2960L)</span></h2>
+    <p class="muted">Konzola se na switch prijavljuje preko SSH-a nalogom koji upišete (domenski nalog). Pre prijave konzola proveri
+      nalog i lozinku u domenu, pa pogrešna lozinka ne pokušava prijavu na switch-eve (zaključavanje naloga). Nalog i lozinka se koriste
+      samo za izabranu radnju i nigde se ne čuvaju; u logu konzole se beleži ko je, kada i sa kog switch-a šta preuzeo.
+      Izvršavaju se samo komande za pregled (<code>show logging</code>, <code>show running-config</code>).</p>
+    <p id="maint-noadmin" class="warn" hidden>Održavanje je dostupno samo administratoru.</p>
+    <form id="maint-form" class="deploy-grid" autocomplete="off" onsubmit="return false">
+      <label>Nalog (domenski) <input id="m-user" placeholder="FIRMA\korisnik" autocomplete="off"></label>
+      <label>Lozinka <input id="m-pass" type="password" autocomplete="new-password"></label>
+    </form>
+    <p id="maint-msg" class="muted" aria-live="polite"></p>
+    <div class="toolbar">
+      <input id="maint-search" type="search" placeholder="Pretraga: switch, IP adresa, lokacija…" autocomplete="off">
+      <span id="maint-count" class="muted"></span>
+      <span class="spacer"></span>
+      <button type="button" id="maint-bulk-log" disabled>Preuzmi log za izabrane</button>
+      <button type="button" id="maint-bulk-backup" disabled>Preuzmi backup za izabrane</button>
+    </div>
+    <div id="maint-job" hidden></div>
+    <div class="table-wrap">
+      <table id="maint-table">
+        <thead><tr><th class="sel"><input type="checkbox" id="maint-all" title="Izaberi sve prikazane"></th><th>Switch</th><th>Lokacija</th><th>IP adresa</th><th>Model</th><th>Radnje</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="srv-events-sec" class="page-srv" hidden>
+    <h2>Događaji servera <span class="muted h-note">padovi, povratci, restarti, visoko opterećenje</span></h2>
+    <div class="table-wrap">
+      <table id="srv-events">
+        <thead><tr><th>Vreme</th><th>Događaj</th><th>Trajanje</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <nav id="srv-ev-pager" class="pager" aria-label="Strane događaja servera" hidden></nav>
+  </section>
+
+  <div class="top page-agents" id="agents-top">
+  <section id="agents-sec">
+    <h2>Agenti</h2>
+    <div class="toolbar">
+      <input id="a-search" type="search" placeholder="Pretraga: računar, IP adresa, gateway…" autocomplete="off">
+      <details id="a-locations" class="multi">
+        <summary id="a-loc-summary">Lokacije: sve</summary>
+        <div class="menu">
+          <div class="menu-actions">
+            <button id="a-loc-all" type="button">Prikaži sve lokacije</button>
+          </div>
+          <div id="a-loc-list"></div>
+        </div>
+      </details>
+      <label class="check"><input id="a-online" type="checkbox"> samo na vezi</label>
+      <span id="a-count" class="muted"></span>
+      <span class="spacer"></span>
+      <details class="multi cols-menu" data-table="agents"><summary>Kolone</summary><div class="menu"></div></details>
+    </div>
+    <div id="a-upgrade" class="upgrade-banner" hidden></div>
+    <div class="table-wrap">
+      <table id="agents">
+        <thead>
+          <tr>
+            <th></th><th>Računar</th><th>Lokacija</th><th>OS</th><th>IP adrese</th><th>Gateway</th><th>Povezan sa</th>
+            <th>RTT kontrolnog kanala</th><th>Poslednji put viđen</th><th>Akcije</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <nav id="a-pager" class="pager" aria-label="Strane spiska agenata" hidden></nav>
+    <p id="no-agents" class="muted" hidden>Nijedan agent još nije povezan. Pogledajte README za instalaciju agenta.</p>
+  </section>
+
+  <aside id="live" aria-live="polite">
+    <h2>Merenje uživo</h2>
+    <label class="check live-others"><input id="live-others" type="checkbox"> prikaži i merenja drugih korisnika</label>
+    <div id="live-others-note" class="muted" hidden></div>
+    <div id="live-empty" class="muted">Ovde se prikazuje tok merenja. Pokrenite „Latencija”, „Ping”, „Brzina” ili „LAN test” kod nekog računara.</div>
+    <div id="live-body" hidden>
+      <div id="live-head">
+        <div id="live-title"></div>
+        <div id="live-sub" class="muted"></div>
+        <div class="lv-progress" id="sp-progress"><div class="bar"><i></i></div><span class="pct"></span></div>
+      </div>
+      <div id="live-left">
+      <svg id="gauge" viewBox="0 0 240 146" role="img" aria-labelledby="live-value">
+        <path id="g-track" d="M 24 120 A 96 96 0 0 1 216 120" pathLength="100"></path>
+        <path id="g-fill" d="M 24 120 A 96 96 0 0 1 216 120" pathLength="100"></path>
+        <g id="g-ticks"></g>
+        <g id="g-needle"><line x1="120" y1="120" x2="120" y2="60"></line><circle cx="120" cy="120" r="6"></circle></g>
+      </svg>
+      <div id="live-phase"></div>
+      <div id="live-value"><span id="live-num">0</span> <span class="unit">Mb/s</span></div>
+      </div>
+      <div id="live-right">
+      <div id="live-chart-wrap">
+        <svg id="live-chart" viewBox="0 0 280 74" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div id="live-hover" class="muted"></div>
+      </div>
+      <p id="live-overlap" class="lv-overlap busy" hidden></p>
+      <div id="live-legend" class="muted"></div>
+      <div id="live-final"></div>
+      <div id="live-actions" class="actions"><button id="live-repeat" type="button">Ponovi test</button></div>
+      <p id="live-note" class="muted"></p>
+      </div>
+    </div>
+    <div id="lat-body" hidden>
+      <div class="lv-head">
+        <div id="lat-title" class="lv-title"></div>
+        <div id="lat-sub" class="muted lv-sub"></div>
+        <div class="lv-progress" id="lat-progress"><div class="bar"><i></i></div><span class="pct"></span></div>
+      </div>
+      <div class="lv-left">
+        <div id="lat-value"><span id="lat-num">…</span> <span class="unit">ms</span></div>
+        <div id="lat-caption" class="muted"></div>
+        <div id="lat-verdict"></div>
+        <div id="lat-tiles"></div>
+      </div>
+      <div class="lv-right">
+        <div class="lat-chart-wrap">
+          <svg id="lat-chart" class="lat-chart" viewBox="0 0 280 130" aria-hidden="true"></svg>
+          <div id="lat-hover" class="muted"></div>
+        </div>
+        <div id="lat-legend" class="muted lat-legend"></div>
+        <ul id="lat-explain"></ul>
+        <p id="lat-note" class="muted"></p>
+        <div class="actions lat-actions">
+          <button id="lat-stop" type="button" hidden>Zaustavi ping</button>
+          <a id="lat-report-html" class="btnlink" hidden download>⤓ Izveštaj (HTML)</a>
+          <a id="lat-report-csv" class="btnlink" hidden download>⤓ Podaci (CSV, Excel)</a>
+          <button id="lat-repeat" type="button">Ponovi merenje</button>
+        </div>
+      </div>
+    </div>
+    <div id="live-more" class="muted"></div>
+  </aside>
+  </div>
+
+  <section id="params" class="page-agents">
+    <h2>Parametri merenja</h2>
+    <div class="grid">
+      <label>Cilj za latenciju
+        <input id="p-target" placeholder="prazno = konzola; npr. 10.0.0.5 ili server:445">
+      </label>
+      <label>Metoda latencije
+        <select id="p-method">
+          <option value="">automatski (ICMP za host, TCP za host:port)</option>
+          <option value="icmp">ICMP ping</option>
+          <option value="tcp">TCP (host:port)</option>
+        </select>
+      </label>
+      <label>Broj merenja latencije
+        <input id="p-count" type="number" min="1" max="100" value="10">
+      </label>
+      <label>Trajanje testa brzine (s)
+        <input id="p-seconds" type="number" min="1" max="30" value="5">
+      </label>
+      <label>Paralelnih konekcija
+        <input id="p-streams" type="number" min="1" max="16" value="4">
+      </label>
+      <label>Smer
+        <select id="p-direction">
+          <option value="both">oba smera</option>
+          <option value="download">samo download</option>
+          <option value="upload">samo upload</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section id="results-sec" class="page-agents">
+    <h2>Rezultati</h2>
+    <div class="toolbar">
+      <input id="r-search" type="search" placeholder="Pretraga merenja po nazivu računara…" autocomplete="off">
+      <select id="filter"><option value="">svi agenti</option></select>
+      <span id="r-count" class="muted"></span>
+      <span class="spacer"></span>
+      <details class="multi cols-menu" data-table="results"><summary>Kolone</summary><div class="menu"></div></details>
+    </div>
+    <div class="table-wrap">
+      <table id="results">
+        <thead>
+          <tr><th>Vreme</th><th>Agent</th><th>Tip</th><th>Latencija</th><th>Download</th><th>Upload</th><th>Pokrenuo</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <nav id="r-pager" class="pager" aria-label="Strane istorije merenja" hidden></nav>
+  </section>
+</main>
+
+<dialog id="settings-dlg" class="settings-dlg" aria-labelledby="settings-title">
+  <div class="sd-head">
+    <h2 id="settings-title">Podešavanja</h2>
+    <span class="spacer"></span>
+    <button id="settings-close" type="button" title="Zatvori (Esc)" aria-label="Zatvori podešavanja">✕</button>
+  </div>
+  <nav class="sd-tabs" role="tablist" aria-label="Delovi podešavanja">
+    <button type="button" role="tab" data-tab="general">Opšte</button>
+    <button type="button" role="tab" data-tab="deploy" class="admin-only">Instalacija agenata</button>
+    <button type="button" role="tab" data-tab="notify" class="admin-only">Obaveštenja</button>
+    <button type="button" role="tab" data-tab="snmp" class="admin-only">SNMP</button>
+    <button type="button" role="tab" data-tab="locations" class="admin-only">Lokacije</button>
+    <button type="button" role="tab" data-tab="users" class="admin-only">Korisnici</button>
+  </nav>
+  <div class="sd-body">
+    <div class="tab-panel" data-tab="general">
+    <p id="cert-warning" class="warn" hidden>
+      Konzola koristi privremeni (self-signed) sertifikat. Agenti mu ne veruju i neće moći da se povežu
+      dok ne otpremite sertifikat iz internog CA (AD CS) ispod.
+    </p>
+    <div class="grid2">
+      <div class="admin-only">
+        <h3>Instalacija agenata</h3>
+        <label>Token za agente
+          <span class="actions">
+            <button id="token-show" type="button">Prikaži</button>
+            <button id="token-copy" type="button">Kopiraj</button>
+          </span>
+        </label>
+        <div id="token" class="token" hidden></div>
+        <p class="muted">Komanda za tihu instalaciju agenta (kao administrator):</p>
+        <pre id="msi-cmd" class="cmd"></pre>
+      </div>
+      <div class="admin-only">
+        <h3>TLS sertifikat</h3>
+        <div id="cert-info" class="muted"></div>
+        <form id="cert-form" class="stack">
+          <label>PFX fajl (sa privatnim ključem) <input id="cert-file" type="file" accept=".pfx,.p12" required></label>
+          <label>Lozinka PFX fajla <input id="cert-pass" type="password" autocomplete="off"></label>
+          <button type="submit">Otpremi i primeni</button>
+          <p id="cert-msg"></p>
+        </form>
+      </div>
+      <div>
+        <h3>Moja lozinka</h3>
+        <form id="pass-form" class="stack">
+          <label>Trenutna lozinka <input id="pass-cur" type="password" autocomplete="current-password" required></label>
+          <label>Nova lozinka (najmanje 8 karaktera) <input id="pass-new" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>Ponovite novu lozinku <input id="pass-new2" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button type="submit">Promeni lozinku</button>
+          <p id="pass-msg"></p>
+        </form>
+      </div>
+    </div>
+    </div>
+    <div class="admin-only tab-panel" data-tab="deploy" id="deploy-block">
+      <h3>Instalacija agenata</h3>
+      <p class="muted">Konzola preko WinRM-a kopira agenta na navedene računare i instalira ga sa svojom adresom i tokenom.
+        Potreban je nalog koji je lokalni administrator na tim računarima. Nalog i lozinka se koriste samo za ovu
+        instalaciju i nigde se ne čuvaju.</p>
+      <form id="deploy-form" class="deploy-grid">
+        <label class="span2">Vrsta agenta
+          <select id="d-kind">
+            <option value="">Računari (agent za merenje mreže)</option>
+            <option value="server">Serveri (agent za stanje servera: CPU, RAM, diskovi)</option>
+          </select>
+        </label>
+        <p id="deploy-nomsi" class="warn span2" hidden>MSI agenta nije pronađen na serveru. Instalirajte novu verziju konzole (njen MSI sadrži i MSI agenta).</p>
+        <label class="span2"><span><span id="d-hosts-lbl">Računari</span> (naziv ili IP adresa; jedan po redu ili razdvojeni zarezom)</span>
+          <textarea id="d-hosts" rows="5" spellcheck="false" placeholder="INF-PC01&#10;INF-PC02&#10;fin-racunar"></textarea>
+        </label>
+        <div class="span2 actions" id="d-pc-fill">
+          <button id="d-fill-offline" type="button" title="Računari koji su u konzoli, a nisu na vezi">Dodaj računare koji nisu na vezi</button>
+          <button id="d-fill-all" type="button" title="Svi računari iz spiska agenata (za nadogradnju)">Dodaj sve računare iz konzole</button>
+          <button id="d-fill-old" type="button" title="Računari na vezi čiji agent treba nadograditi (oni koji nisu na vezi se preskaču)">Dodaj računare sa starom verzijom agenta</button>
+        </div>
+        <div class="span2 actions" hidden id="d-srv-fill">
+          <button id="d-fill-srv-offline" type="button" title="Serveri koji su u konzoli, a nisu na vezi">Dodaj servere koji nisu na vezi</button>
+          <button id="d-fill-srv-all" type="button" title="Svi serveri sa stranice „Serveri” (za nadogradnju)">Dodaj sve servere iz konzole</button>
+          <button id="d-fill-srv-old" type="button" title="Serveri na vezi čiji agent treba nadograditi (oni koji nisu na vezi se preskaču)">Dodaj servere sa starom verzijom agenta</button>
+        </div>
+        <label>Administratorski nalog <input id="d-user" placeholder="FIRMA\admin.korisnik" autocomplete="off" required></label>
+        <label>Lozinka <input id="d-pass" type="password" autocomplete="new-password" required></label>
+        <label class="span2">Adresa konzole za agente
+          <input id="d-url" placeholder="https://netmon.firma.local:8443">
+        </label>
+        <label class="check span2"><input id="d-upgrade" type="checkbox"> samo nadogradnja (agent zadržava postojeću adresu i token)</label>
+        <div class="span2 actions"><button id="d-start" type="submit">Instaliraj</button></div>
+      </form>
+      <div class="table-wrap" id="deploy-result" hidden>
+        <p id="deploy-summary" class="muted"></p>
+        <table id="deploy-table">
+          <thead><tr><th>Računar</th><th>Status</th><th>Poruka</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="admin-only tab-panel" data-tab="notify" id="notify-block">
+      <h3>Obaveštenja</h3>
+      <form id="notify-form" class="deploy-grid">
+        <label class="check span2 master"><input id="n-enabled" type="checkbox">
+          <span><strong>Sva obaveštenja uključena</strong> – glavni prekidač: kada je isključen, ne šalje se ništa, bez obzira na kanale ispod.</span></label>
+
+        <div class="span2 table-wrap">
+          <table class="ch-table">
+            <thead><tr><th>Kanal</th><th>Uključen</th><th>Računari</th><th>Mrežna oprema</th><th>Serveri</th><th>Stanje</th><th></th></tr></thead>
+            <tbody>
+              <tr data-ch="email"><td>E-mail</td><td><input id="ch-email-on" type="checkbox" aria-label="E-mail uključen"></td>
+                <td><input id="ch-email-agents" type="checkbox" aria-label="E-mail za računare"></td><td><input id="ch-email-net" type="checkbox" aria-label="E-mail za mrežnu opremu"></td><td><input id="ch-email-srv" type="checkbox" aria-label="E-mail za servere"></td>
+                <td id="ch-email-st" class="ch-st"></td><td><button type="button" class="ch-test" data-ch="email">Proba</button></td></tr>
+              <tr data-ch="sms"><td>SMS</td><td><input id="ch-sms-on" type="checkbox" aria-label="SMS uključen"></td>
+                <td><input id="ch-sms-agents" type="checkbox" aria-label="SMS za računare"></td><td><input id="ch-sms-net" type="checkbox" aria-label="SMS za mrežnu opremu"></td><td><input id="ch-sms-srv" type="checkbox" aria-label="SMS za servere"></td>
+                <td id="ch-sms-st" class="ch-st"></td><td><button type="button" class="ch-test" data-ch="sms">Proba</button></td></tr>
+              <tr data-ch="teams"><td>Teams</td><td><input id="ch-teams-on" type="checkbox" aria-label="Teams uključen"></td>
+                <td><input id="ch-teams-agents" type="checkbox" aria-label="Teams za računare"></td><td><input id="ch-teams-net" type="checkbox" aria-label="Teams za mrežnu opremu"></td><td><input id="ch-teams-srv" type="checkbox" aria-label="Teams za servere"></td>
+                <td id="ch-teams-st" class="ch-st"></td><td><button type="button" class="ch-test" data-ch="teams">Proba</button></td></tr>
+              <tr data-ch="ntfy"><td>ntfy</td><td><input id="ch-ntfy-on" type="checkbox" aria-label="ntfy uključen"></td>
+                <td><input id="ch-ntfy-agents" type="checkbox" aria-label="ntfy za računare"></td><td><input id="ch-ntfy-net" type="checkbox" aria-label="ntfy za mrežnu opremu"></td><td><input id="ch-ntfy-srv" type="checkbox" aria-label="ntfy za servere"></td>
+                <td id="ch-ntfy-st" class="ch-st"></td><td><button type="button" class="ch-test" data-ch="ntfy">Proba</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="span2 muted small">„Proba” šalje probnu poruku i kada je kanal isključen (da se podešavanja provere pre uključivanja); pre slanja se podešavanja čuvaju.</p>
+
+        <h4 class="span2">Računari</h4>
+        <label>Za koje računare
+          <select id="n-scope">
+            <option value="watched">samo označene (🔔)</option>
+            <option value="all">sve računare</option>
+          </select>
+        </label>
+        <label>Obavesti posle (minuta van veze)
+          <input id="n-delay" type="number" min="1" max="1440" value="5">
+        </label>
+        <label class="check span2"><input id="n-recovery" type="checkbox" checked> javi i kada se računar ili uređaj vrati na vezu</label>
+        <p class="span2 muted small">Računari se ugase svako veče, zato je bolje pratiti samo izabrane (zvonce 🔔 u spisku agenata).
+          Za mrežnu opremu obaveštenja se biraju po uređaju (stranica „Mrežna oprema”, polje „Obaveštenja”).</p>
+
+        <h4 class="span2">Serveri</h4>
+        <label>Obavesti posle (minuta bez veze) <input id="n-srv-delay" type="number" min="1" max="1440" value="2"></label>
+        <label>Visoko opterećenje traje (minuta) <input id="n-srv-high" type="number" min="1" max="1440" value="10"></label>
+        <label>Prag CPU (%) <input id="n-srv-cpu" type="number" min="1" max="100" value="90"></label>
+        <label>Prag RAM (%) <input id="n-srv-mem" type="number" min="1" max="100" value="90"></label>
+
+        <h4 class="span2">SMTP server (za e-mail i SMS)</h4>
+        <label>SMTP server <input id="n-host" placeholder="mail.firma.rs" autocomplete="off"></label>
+        <label>Port (465 = TLS od početka) <input id="n-port" type="number" min="1" max="65535" value="25"></label>
+        <label>Pošiljalac <input id="n-from" placeholder="NetMon &lt;netmon@firma.rs&gt;" autocomplete="off"></label>
+        <label>Šifrovanje
+          <select id="n-tls">
+            <option value="">STARTTLS ako ga server nudi (preporučeno)</option>
+            <option value="off">bez šifrovanja (samo interni relay bez prijave)</option>
+          </select>
+        </label>
+        <label>Nalog za SMTP (prazno = bez prijave) <input id="n-user" autocomplete="off"></label>
+        <label>Lozinka <input id="n-pass" type="password" autocomplete="new-password"></label>
+
+        <h4 class="span2">E-mail</h4>
+        <label class="span2">Primaoci (razdvojeni zarezom) <input id="n-to" placeholder="ime.prezime@firma.rs" autocomplete="off"></label>
+
+        <h4 class="span2">SMS telefon</h4>
+        <p class="span2 muted small">Konzola šalje kratku poruku (do 160 znakova) e-mailom na sanduče koje čita Android telefon
+          sa aplikacijom NetMon SMS; telefon je šalje kao SMS na brojeve upisane u aplikaciji.</p>
+        <label>Sanduče SMS telefona <input id="n-sms" placeholder="netmon@firma.rs" autocomplete="off"></label>
+        <label>Dnevna provera veze (prazno = bez)
+          <input id="n-sms-time" type="time" value="08:00">
+        </label>
+        <label class="check span2"><input id="n-sms-q" type="checkbox">
+          <span>Odgovaraj na SMS upite – SMS „lokacija &lt;naziv&gt;”, „server &lt;naziv&gt;” (spisak komandi: SMS „status”) na broj NetMon telefona, sa broja
+            iz aplikacije, vraća stanje lokacije ili servera. Konzola čita sanduče preko IMAP-a istim nalogom kao SMTP; radi i kada su obaveštenja isključena.</span></label>
+        <label>IMAP server (prazno = isti kao SMTP) <input id="n-imap-host" autocomplete="off"></label>
+        <label>IMAP port <input id="n-imap-port" type="number" min="1" max="65535" value="993"></label>
+        <p id="n-sms-q-st" class="span2 muted small"></p>
+        <label class="span2">Skraćenice lokacija za SMS upit (jedna po redu: <code>PS = Glavni Centar</code>; SMS „lokacija PS”)
+          <textarea id="n-sms-aliases" rows="8" spellcheck="false"></textarea>
+        </label>
+        <label class="span2">Skraćenice servera za SMS upit (jedna po redu: <code>SOL = srv-monitor</code>; SMS „server SOL”; pun naziv servera radi i bez skraćenice)
+          <textarea id="n-sms-srv-aliases" rows="4" spellcheck="false" placeholder="SOL = srv-monitor"></textarea>
+        </label>
+
+        <h4 class="span2">Microsoft Teams</h4>
+        <label class="span2">Adresa Workflows webhook-a
+          <input id="n-teams" placeholder="https://….logic.azure.com/workflows/…" autocomplete="off">
+        </label>
+
+        <h4 class="span2">ntfy (aplikacija za telefon)</h4>
+        <label>Adresa teme <input id="n-ntfy" placeholder="https://ntfy.sh/netmon-dugacko-tajno-ime" autocomplete="off"></label>
+        <label>Access token (opciono) <input id="n-ntfy-token" type="password" autocomplete="new-password"></label>
+        <label class="span2">HTTP proxy za Teams i ntfy (opciono)
+          <input id="n-proxy" placeholder="http://proxy.firma.local:8080" autocomplete="off">
+        </label>
+
+        <div class="span2 actions">
+          <button type="submit">Sačuvaj</button>
+        </div>
+      </form>
+      <p id="notify-msg"></p>
+      <p id="notify-status" class="muted"></p>
+    </div>
+    <div class="admin-only tab-panel" data-tab="snmp">
+      <h3>SNMP (mrežna oprema)</h3>
+      <form id="snmp-form">
+    <p class="muted">Konzola samo čita podatke (nikada ne menja konfiguraciju uređaja). Preporučuje se SNMPv3 sa šifrovanjem i
+      ACL-om na uređaju koji dozvoljava samo adresu konzole. Lozinke se čuvaju u konfiguraciji konzole i ne prikazuju se ponovo.</p>
+    <div class="grid lan-params">
+      <label>Verzija
+        <select id="snmp-version">
+          <option value="v3">SNMPv3 (preporučeno)</option>
+          <option value="v2c">SNMPv2c (community)</option>
+        </select>
+      </label>
+      <label class="snmp-v3">Korisnik <input id="snmp-user" autocomplete="off" placeholder="netmon"></label>
+      <label class="snmp-v3">Autentifikacija
+        <select id="snmp-auth-proto">
+          <option value="SHA">SHA (Cisco: auth sha)</option>
+          <option value="SHA256">SHA-256</option>
+          <option value="SHA384">SHA-384</option>
+          <option value="SHA512">SHA-512</option>
+          <option value="MD5">MD5 (zastarelo)</option>
+        </select>
+      </label>
+      <label class="snmp-v3">Lozinka za autentifikaciju <input id="snmp-auth-pass" type="password" autocomplete="new-password"></label>
+      <label class="snmp-v3">Šifrovanje
+        <select id="snmp-priv-proto">
+          <option value="AES">AES-128 (Cisco: priv aes 128)</option>
+          <option value="AES256C">AES-256 (Cisco: priv aes 256)</option>
+          <option value="AES192C">AES-192 (Cisco: priv aes 192)</option>
+          <option value="AES256">AES-256 (Blumenthal)</option>
+          <option value="AES192">AES-192 (Blumenthal)</option>
+          <option value="DES">DES (zastarelo)</option>
+        </select>
+      </label>
+      <label class="snmp-v3">Lozinka za šifrovanje <input id="snmp-priv-pass" type="password" autocomplete="new-password"></label>
+      <label class="snmp-v2c" hidden>Community <input id="snmp-community" type="password" autocomplete="new-password"></label>
+      <label>Port <input id="snmp-port" type="number" min="1" max="65535" value="161"></label>
+      <label>Čitanje na (sekundi) <input id="snmp-interval" type="number" min="30" max="3600" value="60"></label>
+      <label>Čekanje odgovora (s) <input id="snmp-timeout" type="number" min="1" max="30" value="3"></label>
+    </div>
+    <h4>Dodatni SNMP nalozi</h4>
+    <p class="muted small">Za uređaje sa drugim SNMP podacima (npr. operater CE ruteri). Nalog se bira u Izmeni uređaja; port,
+      interval i čekanje su isti kao gore. Lozinke i community se ne prikazuju ponovo (prazno = bez promene).</p>
+    <div id="snmp-profiles"></div>
+    <div class="actions"><button id="snmp-add-profile" type="button">+ Dodaj SNMP nalog</button></div>
+    <p id="snmp-msg"></p>
+        <div class="actions"><button id="snmp-save" type="submit">Sačuvaj SNMP podešavanja</button></div>
+      </form>
+    </div>
+    <div class="admin-only tab-panel" data-tab="locations" id="locations-block">
+      <h3>Lokacije</h3>
+      <p class="muted">Jedna lokacija po redu: <code>Naziv = početak adrese, početak adrese</code>.
+        Početak adrese se piše po oktetima (<code>10.18</code> = sve adrese 10.18.x.x, <code>10.0.128</code> = 10.0.128.x)
+        ili kao CIDR (<code>10.0.128.0/17</code>). Kada se opsezi preklapaju, važi uži (npr. VPN 10.0.128 ispred 10.0).
+        Lokacija se određuje po adresi sa koje se računar povezao na konzolu.</p>
+      <textarea id="loc-text" rows="10" spellcheck="false" placeholder="Centrala = 10.0&#10;VPN = 10.0.128&#10;Filijala = 10.18"></textarea>
+      <div class="actions"><button id="loc-save" type="button">Sačuvaj lokacije</button></div>
+      <p id="loc-msg"></p>
+    </div>
+    <div class="admin-only tab-panel" data-tab="users" id="users-block">
+      <h3>Korisnici</h3>
+      <p class="muted">Administrator: sve, uključujući podešavanja i korisnike.
+        Operater: vidi računare i rezultate i pokreće merenja, bez pristupa podešavanjima.</p>
+      <div class="table-wrap">
+        <table id="users">
+          <thead><tr><th>Korisnik</th><th>Uloga</th><th>Akcije</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <form id="user-form" class="inline-form">
+        <label>Korisničko ime <input id="u-name" autocomplete="off" required></label>
+        <label>Lozinka (najmanje 8 karaktera) <input id="u-pass" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>Uloga
+          <select id="u-role"><option value="operator">Operater</option><option value="admin">Administrator</option></select>
+        </label>
+        <button type="submit">Dodaj korisnika</button>
+      </form>
+      <p id="user-msg"></p>
+    </div>
+  </div>
+</dialog>
+<dialog id="ping-dlg" aria-labelledby="ping-title">
+  <form method="dialog">
+    <h2 id="ping-title">Ping</h2>
+    <p id="ping-from" class="muted"></p>
+    <div class="grid lan-params">
+      <label>Trajanje <select id="ping-duration"></select></label>
+      <label>Razmak između pingova <select id="ping-interval"></select></label>
+    </div>
+    <div id="ping-custom" class="ping-custom" hidden>
+      <label>Sati <input id="ping-h" type="number" min="0" max="24" value="0"></label>
+      <label>Minuta <input id="ping-m" type="number" min="0" max="59" value="10"></label>
+      <label>Sekundi <input id="ping-s" type="number" min="0" max="59" value="0"></label>
+    </div>
+    <p id="ping-info" class="muted"></p>
+    <p id="ping-msg"></p>
+    <div class="dlg-actions">
+      <span class="spacer"></span>
+      <button id="ping-cancel" type="button">Otkaži</button>
+      <button id="ping-start" type="button" class="primary">Pokreni ping</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="lan-dlg" aria-labelledby="lan-title">
+  <form method="dialog" id="lan-form">
+    <h2 id="lan-title">LAN test</h2>
+    <p id="lan-from" class="muted"></p>
+
+    <div id="lan-step1">
+      <div class="toolbar">
+        <input id="lan-search" type="search" placeholder="Pretraga: naziv računara ili IP adresa…" autocomplete="off">
+        <select id="lan-loc"></select>
+      </div>
+      <div id="lan-list" class="pick-list" role="listbox" aria-label="Računari"></div>
+      <p id="lan-count" class="muted"></p>
+    </div>
+
+    <div id="lan-step2" hidden>
+      <div id="lan-pair"></div>
+      <div class="grid lan-params">
+        <label>Broj merenja latencije
+          <input id="lan-count-lat" type="number" min="1" max="100" value="5">
+        </label>
+        <label>Trajanje testa brzine (s)
+          <input id="lan-seconds" type="number" min="1" max="30" value="5">
+        </label>
+        <label>Paralelnih konekcija
+          <input id="lan-streams" type="number" min="1" max="16" value="4">
+        </label>
+        <label>Smer
+          <select id="lan-direction">
+            <option value="both">oba smera</option>
+            <option value="download">samo download (drugi računar → ovaj)</option>
+            <option value="upload">samo upload (ovaj → drugi računar)</option>
+          </select>
+        </label>
+      </div>
+      <details class="lan-adv">
+        <summary>Napredno</summary>
+        <label>IP adresa drugog računara (prazno = automatski)
+          <input id="lan-addr" placeholder="automatski" autocomplete="off">
+        </label>
+        <p class="muted">Potrebno samo ako automatski izbor ne radi (npr. računar ima više mrežnih kartica ili VPN).</p>
+      </details>
+      <p id="lan-msg" class="muted"></p>
+    </div>
+
+    <div class="dlg-actions">
+      <button id="lan-back" type="button" hidden>‹ Nazad</button>
+      <span class="spacer"></span>
+      <button id="lan-cancel" type="button">Otkaži</button>
+      <button id="lan-start" type="button" class="primary" hidden>Pokreni test</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="nd-dlg" aria-labelledby="nd-dlg-title">
+  <form method="dialog" id="nd-form">
+    <h2 id="nd-dlg-title">Uređaj</h2>
+    <div class="grid lan-params">
+      <label>Naziv <input id="nd-name" maxlength="64" required autocomplete="off"></label>
+      <label>IP adresa <input id="nd-ip" placeholder="10.0.35.15" required autocomplete="off"></label>
+      <label>Vrsta <select id="nd-f-type"></select></label>
+      <label>Lokacija <select id="nd-f-loc"></select></label>
+      <label>Mesto (prostorija, čvorište) <input id="nd-place" maxlength="64" autocomplete="off" placeholder="npr. Server sala"></label>
+      <label>Uloga
+        <select id="nd-role">
+          <option value="">običan uređaj</option>
+          <option value="wan">glavna veza lokacije (MPLS ruter)</option>
+          <option value="backup">rezervna veza lokacije</option>
+        </select>
+      </label>
+    </div>
+    <p id="nd-role-help" class="muted"></p>
+    <div class="nd-checks">
+      <label class="check"><input id="nd-active" type="checkbox" checked> aktivan (proverava se)</label>
+      <label class="check"><input id="nd-f-snmp" type="checkbox" checked> čitaj SNMP (portovi, saobraćaj)</label>
+      <label>SNMP nalog <select id="nd-f-snmp-profile"><option value="">podrazumevani</option></select></label>
+      <label class="check"><input id="nd-notify" type="checkbox" checked> obaveštenja (pad, restart, temperatura switch-a)</label>
+    </div>
+    <fieldset id="nd-mpls" class="snmp-profile">
+      <legend>MPLS (operater CE ruter)</legend>
+      <div class="grid lan-params">
+        <label>MPLS link
+          <select id="nd-mpls-link">
+            <option value="">nije CE ruter</option>
+            <option value="primary">primarni</option>
+            <option value="secondary">sekundarni (rezervni)</option>
+          </select>
+        </label>
+        <label>Vrsta linka
+          <select id="nd-mpls-kind">
+            <option value="">—</option>
+            <option value="optika">optika</option>
+            <option value="rr">radio-relejni</option>
+          </select>
+        </label>
+        <label>WAN interfejs <input id="nd-mpls-if" list="nd-mpls-ifaces" placeholder="prazno = automatski (opis „WAN”)" autocomplete="off"></label>
+        <datalist id="nd-mpls-ifaces"></datalist>
+        <label>Ugovorena brzina (Mb/s) <input id="nd-mpls-speed" type="number" min="0" max="100000" placeholder="npr. 30"></label>
+      </div>
+      <p class="muted small">CE ruter se prikazuje u kartici MPLS (ne u Mrežnoj opremi). Lokacija je ona izabrana gore.</p>
+    </fieldset>
+    <label>Napomena <input id="nd-note" maxlength="200" autocomplete="off"></label>
+    <p id="nd-msg"></p>
+    <div class="dlg-actions">
+      <button id="nd-delete" type="button" class="danger" hidden>Obriši uređaj</button>
+      <span class="spacer"></span>
+      <button id="nd-cancel" type="button">Otkaži</button>
+      <button id="nd-save" type="submit" class="primary">Sačuvaj</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="nd-import-dlg" aria-labelledby="nd-import-title">
+  <form method="dialog">
+    <h2 id="nd-import-title">Uvoz uređaja (CSV)</h2>
+    <p class="muted">Jedan uređaj po redu, kolone razdvojene sa <code>;</code> (Excel → Sačuvaj kao → CSV). Prvi red je zaglavlje:</p>
+    <pre class="cmd">Lokacija;Mesto;Naziv;IP;Tip;Uloga;Aktivan;Napomena
+Glavni Centar;Server sala;HQ_DC_S-I;10.0.35.15;switch;;da;
+Sever;;MPLS ruter;10.24.0.1;ruter;wan;da;WAN adresa operatera</pre>
+    <p class="muted">Tip: switch, ruter, firewall, wlc, ap, ups, server, štampač, ostalo. Uloga: prazno, <code>wan</code> (glavna/MPLS veza)
+      ili <code>backup</code> (rezervna). Prazna lokacija = određuje se po IP adresi. Uređaj sa adresom koja već postoji se ažurira.</p>
+    <label>Fajl <input id="nd-import-file" type="file" accept=".csv,.txt,text/csv,text/plain"></label>
+    <label>ili nalepite sadržaj <textarea id="nd-import-text" rows="8" spellcheck="false"></textarea></label>
+    <p id="nd-import-msg"></p>
+    <div class="dlg-actions">
+      <span class="spacer"></span>
+      <button id="nd-import-cancel" type="button">Zatvori</button>
+      <button id="nd-import-go" type="button" class="primary">Uvezi</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+<script src="netdev.js"></script>
+<script src="servers.js"></script>
+<script src="maint.js"></script>
+<script src="mpls.js"></script>
+<script src="sections.js"></script>
+</body>
+</html>
